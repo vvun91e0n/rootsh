@@ -5,6 +5,11 @@
  * 14F27.
  */
 
+/*
+ * Modified for targeting 0S X 10.11.3 build 15D21
+ * By vvn91e0n
+ */
+
 #include "kernel_image.h"
 #include "kernel_slide.h"
 #include "kernel_rop.h"
