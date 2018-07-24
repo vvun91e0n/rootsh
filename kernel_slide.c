@@ -63,6 +63,6 @@ find_kernel_slide() {
 	if (is_kernel_slide(kernel_slide)) {
 		return 0;
 	}
-	printf("error: leaked 0x%016llx\n", value);
+	printf("error: leaked 0x%016llx please try again :)\n", value);
 	return 4;
 }
