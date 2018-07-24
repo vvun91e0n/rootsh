@@ -1,3 +1,9 @@
+## rootsh-for-10.11.3
+
+change a few codes for target OS X 10.11.3 build 15D21
+
+forked form https://github.com/bazad/rootsh
+
 ## rootsh
 
 rootsh is a local privilege escalation targeting OS X Yosemite 10.10.5 build
